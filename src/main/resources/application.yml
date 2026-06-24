@@ -1,0 +1,43 @@
+application:
+  batch:
+    chunk-size: 100
+  background-task:
+    core-pool-size: 4
+    queue-capacity: 15
+    thread-name-prefix: s2s
+  dir:
+    source: /home/stephan/Scan2Sheet/data/source
+    archive: /home/stephan/Scan2Sheet/data/archive
+    output: /home/stephan/Scan2Sheet/data/output
+  file:
+    allowed-ext: TIFF,JPEG,GIF,PNG,BMP
+    reader:
+      limit: NONE
+    writer:
+      writing-mode: GOOGLE_SHEET
+      chunk-size: 100
+  table:
+    row:
+      header-present: true
+#      select: 1-3,7,1000
+      select: NONE
+      max-count: 1000
+    col:
+#      select: 9-11,16
+      select: NONE
+
+tess4j:
+#  conf:
+#    tessvariable:
+      # Whitelist intentionally left unset: accept every character the eng model can emit.
+      # (Add entries here as `tessedit_char_whitelist: ...` only if filtering is ever needed.)
+#      options:
+  data:
+    path: /home/stephan/Workspace/Personnal/Serious_Project/scan-2-sheet/tessdata-best
+  engine:
+    mode: 3
+    psm: 7
+
+google-api:
+  application-name: Scan2Sheet-Fx
+  spreadsheet-id: 1x7XmMXaWrCbn16JAc6jWbK1cntJ3sE-r9BiNeqQgSlk
