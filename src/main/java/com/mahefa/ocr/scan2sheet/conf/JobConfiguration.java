@@ -4,7 +4,6 @@ import com.mahefa.ocr.scan2sheet.common.properties.AppProperties;
 import com.mahefa.ocr.scan2sheet.data.RowContext;
 import com.mahefa.ocr.scan2sheet.data.TableStructure;
 import com.mahefa.ocr.scan2sheet.services.QFileStepBuilder;
-import com.mahefa.ocr.scan2sheet.services.job.ProgressReporter;
 import com.mahefa.ocr.scan2sheet.services.job.delegate.CustomMultiResourceItemReader;
 import com.mahefa.ocr.scan2sheet.services.job.delegate.DocumentDelegate;
 import org.apache.commons.io.FileUtils;
@@ -100,8 +99,7 @@ public class JobConfiguration {
 
     @Bean
     @StepScope
-    public CustomMultiResourceItemReader<RowContext> fileReader(AppProperties appProperties,
-                                                                ProgressReporter progressReporter) throws IOException {
+    public CustomMultiResourceItemReader<RowContext> fileReader(AppProperties appProperties) throws IOException {
         CustomMultiResourceItemReader<RowContext> reader = new CustomMultiResourceItemReader<>();
         Resource[] resources = ResourcePatternUtils
                 .getResourcePatternResolver(new DefaultResourceLoader())
@@ -123,7 +121,6 @@ public class JobConfiguration {
         reader.setDelegate(new DocumentDelegate(
                 tableStructure,
                 Path.of(appProperties.getDir().getSource()),
-                progressReporter,
                 documentSession -> eventPublisher.publishEvent(new FileChangedEvent(documentSession))
         ));
 

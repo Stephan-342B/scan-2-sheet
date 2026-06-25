@@ -16,13 +16,15 @@ import java.util.concurrent.atomic.AtomicLong;
  *   ├─ ⠼ &lt;file&gt;   4 rows · 6s        ← live line for the file being processed
  *   └─ 3 files · 18 rows · 38s          ← folder recap (omitted for single-file folders)
  *
- * The current file's line animates in place (spinner + growing row count); when the reader advances
- * to the next file it is "committed" as a permanent ├─ line. When the folder changes (or the run
- * ends) the previous folder is closed with a └─ recap.
+ * The current file's line animates in place (spinner + growing row count); when a row for the next
+ * file is recorded the current one is "committed" as a permanent ├─ line. When the folder changes
+ * (or the run ends) the previous folder is closed with a └─ recap.
  *
- * A background daemon ticker animates the live line; the row counter is bumped by OCR worker
- * threads. All console writes are serialized on a lock so the ticker, file transitions and folder
- * boundaries never interleave on the same line.
+ * Progress is driven by the writer ({@link #recordRows}), keyed by each persisted row's own
+ * document/sheet id, so per-file counts are correct at any chunk size. (Driving it from the reader
+ * would mis-attribute rows once a chunk reads several files ahead before any are processed.) A
+ * background daemon ticker animates the live line; all console writes are serialized on a lock so
+ * the ticker, file transitions and folder boundaries never interleave on the same line.
  */
 @Component
 public class ProgressReporter {
@@ -81,30 +83,29 @@ public class ProgressReporter {
         }
     }
 
-    /** Called when the reader starts a new file. Commits the previous file, opens a new folder header
-     *  when the folder changes, then resets the current-file counters. */
-    public void setFile(String folder, String file, int current, long total) {
+    /** Records {@code count} rows persisted for a file (called by the writer in read order). On the
+     *  first row of a new file the previous file is committed; on a new folder the previous folder
+     *  is closed with a recap and a new header is opened. */
+    public void recordRows(String folder, String file, int count) {
         synchronized (console) {
-            if (fileActive) {
-                commitCurrent();
-            }
-            if (!folderActive || !folder.equals(this.folder)) {
-                if (folderActive) {
-                    finishFolder();
+            if (!fileActive || !file.equals(this.file) || !folder.equals(this.folder)) {
+                if (fileActive) {
+                    commitCurrent();
                 }
-                beginFolder(folder);
+                if (!folderActive || !folder.equals(this.folder)) {
+                    if (folderActive) {
+                        finishFolder();
+                    }
+                    beginFolder(folder);
+                }
+                this.file = file;
+                this.rows.set(0);
+                this.fileStartMillis = System.currentTimeMillis();
+                this.fileActive = true;
             }
-            this.file = file;
-            this.rows.set(0);
-            this.fileStartMillis = System.currentTimeMillis();
-            this.fileActive = true;
+            rows.addAndGet(count);
+            totalRows.addAndGet(count);
         }
-    }
-
-    /** Called once per processed row (OCR worker threads). */
-    public void incrementRow() {
-        rows.incrementAndGet();
-        totalRows.incrementAndGet();
     }
 
     public int getCommittedFiles() {
