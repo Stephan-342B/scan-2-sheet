@@ -8,18 +8,21 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
 
 /**
- * Renders a live, self-updating console line per file while the step runs:
+ * Renders live console progress as a tree, grouping files under their folder so the folder name is
+ * written once instead of being repeated on every line:
  *
- *   ⠼ <folder> / <file>   (1/3)   412 rows · 3m10s
+ *   &lt;folder&gt;
+ *   ├─ ✓ &lt;file&gt;   6 rows · 14s
+ *   ├─ ⠼ &lt;file&gt;   4 rows · 6s        ← live line for the file being processed
+ *   └─ 3 files · 18 rows · 38s          ← folder recap (omitted for single-file folders)
  *
- * When the reader advances to the next file (or the step ends) the current file is "committed"
- * as a permanent line so finished files stay visible as history:
- *
- *   ✓ <folder> / <file>   (1/3)   1000 rows · 8m58s
+ * The current file's line animates in place (spinner + growing row count); when the reader advances
+ * to the next file it is "committed" as a permanent ├─ line. When the folder changes (or the run
+ * ends) the previous folder is closed with a └─ recap.
  *
  * A background daemon ticker animates the live line; the row counter is bumped by OCR worker
- * threads. All console writes are serialized on a lock so the ticker and file transitions never
- * interleave on the same line.
+ * threads. All console writes are serialized on a lock so the ticker, file transitions and folder
+ * boundaries never interleave on the same line.
  */
 @Component
 public class ProgressReporter {
@@ -34,10 +37,15 @@ public class ProgressReporter {
 
     private volatile String folder = "";
     private volatile String file = "";
-    private volatile int fileNo;
-    private volatile long fileTotal;
     private volatile long fileStartMillis;
     private volatile boolean fileActive = false;
+
+    // Current folder roll-up, finalized into the └─ recap when the folder closes.
+    private boolean folderActive = false;
+    private long folderStartMillis;
+    private long folderRows;
+    private int folderFiles;
+
     private int committedFiles;
     private int frame;
     private ScheduledExecutorService ticker;
@@ -48,6 +56,8 @@ public class ProgressReporter {
         }
         committedFiles = 0;
         totalRows.set(0);
+        folder = "";
+        folderActive = false;
         ticker = Executors.newSingleThreadScheduledExecutor(r -> {
             Thread t = new Thread(r, "s2s-progress");
             t.setDaemon(true);
@@ -65,19 +75,26 @@ public class ProgressReporter {
             if (fileActive) {
                 commitCurrent(); // finalize the last file
             }
+            if (folderActive) {
+                finishFolder(); // close the last folder's subtree
+            }
         }
     }
 
-    /** Called when the reader starts a new file. Commits the previous file, then resets. */
+    /** Called when the reader starts a new file. Commits the previous file, opens a new folder header
+     *  when the folder changes, then resets the current-file counters. */
     public void setFile(String folder, String file, int current, long total) {
         synchronized (console) {
             if (fileActive) {
                 commitCurrent();
             }
-            this.folder = folder;
+            if (!folderActive || !folder.equals(this.folder)) {
+                if (folderActive) {
+                    finishFolder();
+                }
+                beginFolder(folder);
+            }
             this.file = file;
-            this.fileNo = current;
-            this.fileTotal = total;
             this.rows.set(0);
             this.fileStartMillis = System.currentTimeMillis();
             this.fileActive = true;
@@ -107,22 +124,45 @@ public class ProgressReporter {
             if (!fileActive) {
                 return;
             }
-            System.out.print("\r" + line(FRAMES[Math.abs(frame++) % FRAMES.length]) + CLEAR_TAIL);
+            System.out.print("\r" + fileLine(FRAMES[Math.abs(frame++) % FRAMES.length]) + CLEAR_TAIL);
             System.out.flush();
         }
     }
 
-    // Caller must hold the console lock.
+    // Caller must hold the console lock. Opens a new folder header and resets the roll-up.
+    private void beginFolder(String folder) {
+        this.folder = folder;
+        this.folderRows = 0;
+        this.folderFiles = 0;
+        this.folderStartMillis = System.currentTimeMillis();
+        this.folderActive = true;
+        System.out.print(System.lineSeparator() + "  " + folder + System.lineSeparator());
+        System.out.flush();
+    }
+
+    // Caller must hold the console lock. Closes the current folder with a recap (skipped when the
+    // folder held a single file, since the recap would just repeat that file's line).
+    private void finishFolder() {
+        if (folderFiles > 1) {
+            long secs = (System.currentTimeMillis() - folderStartMillis) / 1000;
+            System.out.printf("  └─ %d files · %d rows · %s%n", folderFiles, folderRows, human(secs));
+            System.out.flush();
+        }
+        folderActive = false;
+    }
+
+    // Caller must hold the console lock. Finalizes the live file line and rolls it into the folder.
     private void commitCurrent() {
-        System.out.print("\r" + line("✓") + CLEAR_TAIL + System.lineSeparator());
+        System.out.print("\r" + fileLine("✓") + CLEAR_TAIL + System.lineSeparator());
         System.out.flush();
         fileActive = false;
         committedFiles++;
+        folderFiles++;
+        folderRows += rows.get();
     }
 
-    private String line(String marker) {
+    private String fileLine(String marker) {
         long secs = (System.currentTimeMillis() - fileStartMillis) / 1000;
-        return String.format("  %s %s / %s   (%d/%d)   %d rows · %s",
-                marker, folder, file, fileNo, fileTotal, rows.get(), human(secs));
+        return String.format("  ├─ %s %s   %d rows · %s", marker, file, rows.get(), human(secs));
     }
 }

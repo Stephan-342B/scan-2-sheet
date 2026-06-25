@@ -45,8 +45,8 @@ public class CustomJobExecutionListener implements JobExecutionListener {
         AppProperties.Table table = appProperties.getTable();
         log.info("▶ scan-2-sheet  →  {}", destination(writingMode));
         log.info("  rows {} · cols {} · chunk {} · {} workers",
-                table.getRow().getSelect(),
-                table.getCol().getSelect(),
+                selectLabel(table.getRow().getSelect()),
+                selectLabel(table.getCol().getSelect()),
                 appProperties.getBatch().getChunkSize(),
                 appProperties.getBackgroundTask().getCorePoolSize());
     }
@@ -65,6 +65,14 @@ public class CustomJobExecutionListener implements JobExecutionListener {
 
     public DocumentService getDocumentService() {
         return documentService;
+    }
+
+    // Mirror RangeSelection's "no filter" semantics for the banner: an unset/NONE select means
+    // every row/column on that axis is extracted, so show it as ALL rather than the literal "NONE".
+    private static String selectLabel(String select) {
+        return (select == null || select.isBlank() || select.trim().equalsIgnoreCase("NONE"))
+                ? "ALL"
+                : select;
     }
 
     private static String destination(WriterMode mode) {
