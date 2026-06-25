@@ -4,6 +4,7 @@ import com.mahefa.ocr.scan2sheet.common.properties.AppProperties;
 import com.mahefa.ocr.scan2sheet.data.RowContext;
 import com.mahefa.ocr.scan2sheet.data.TableStructure;
 import com.mahefa.ocr.scan2sheet.services.QFileStepBuilder;
+import com.mahefa.ocr.scan2sheet.services.job.ProgressReporter;
 import com.mahefa.ocr.scan2sheet.services.job.delegate.CustomMultiResourceItemReader;
 import com.mahefa.ocr.scan2sheet.services.job.delegate.DocumentDelegate;
 import org.apache.commons.io.FileUtils;
@@ -89,25 +90,40 @@ public class JobConfiguration {
                 .build();
     }
 
+    private static Path relativePath(Resource resource, Path sourceRoot) {
+        try {
+            return sourceRoot.relativize(resource.getFile().toPath());
+        } catch (IOException e) {
+            return Path.of(resource.getFilename());
+        }
+    }
+
     @Bean
     @StepScope
-    public CustomMultiResourceItemReader<RowContext> fileReader(AppProperties appProperties) throws IOException {
+    public CustomMultiResourceItemReader<RowContext> fileReader(AppProperties appProperties,
+                                                                ProgressReporter progressReporter) throws IOException {
         CustomMultiResourceItemReader<RowContext> reader = new CustomMultiResourceItemReader<>();
         Resource[] resources = ResourcePatternUtils
                 .getResourcePatternResolver(new DefaultResourceLoader())
                 .getResources("file:" + appProperties.getDir().getSource() + "/**");
 
+        Path sourceRoot = Path.of(appProperties.getDir().getSource());
         List<Resource> imageFiles = Arrays.stream(resources)
                 .filter(Resource::isReadable)
                 .filter(Resource::isFile)
                 .filter(r -> r.getFilename().matches(".*\\.(png|jpg|jpeg|gif)$"))
-                .sorted(Comparator.comparing(Resource::getFilename))
+                // Directory entries first (ascending by folder, then file), then loose files
+                // sitting directly in the source root (ascending).
+                .sorted(Comparator
+                        .comparingInt((Resource r) -> relativePath(r, sourceRoot).getParent() != null ? 0 : 1)
+                        .thenComparing(r -> relativePath(r, sourceRoot).toString()))
                 .toList();
 
         reader.setResources(imageFiles.toArray(new Resource[0]));
         reader.setDelegate(new DocumentDelegate(
                 tableStructure,
                 Path.of(appProperties.getDir().getSource()),
+                progressReporter,
                 documentSession -> eventPublisher.publishEvent(new FileChangedEvent(documentSession))
         ));
 

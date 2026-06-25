@@ -1,12 +1,11 @@
 package com.mahefa.ocr.scan2sheet.services.job.listener;
 
 import com.mahefa.ocr.scan2sheet.common.event.DocumentChangedEvent;
-import com.mahefa.ocr.scan2sheet.common.WriterServiceBuilder;
-import com.mahefa.ocr.scan2sheet.common.enumerator.WriterMode;
 import com.mahefa.ocr.scan2sheet.common.event.FileChangedEvent;
 import com.mahefa.ocr.scan2sheet.common.properties.AppProperties;
 import com.mahefa.ocr.scan2sheet.data.DocumentSession;
 import com.mahefa.ocr.scan2sheet.services.DocumentService;
+import com.mahefa.ocr.scan2sheet.services.job.ProgressReporter;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.batch.core.ChunkListener;
@@ -40,27 +39,22 @@ public class CustomStepExecutionListener implements StepExecutionListener, Chunk
     private AppProperties appProperties;
 
     @Autowired
-    private WriterServiceBuilder writerServiceBuilder;
+    private ProgressReporter progressReporter;
 
     private Queue<DocumentSession> disposableDocuments = new ConcurrentLinkedQueue<>();
 
-    private DocumentService documentService;
-
     @Override
     public void beforeStep(StepExecution stepExecution) {
-        WriterMode writingMode = appProperties.getFile().getWriter().getWritingMode();
-        documentService = writerServiceBuilder.getWriter(writingMode);
-
-        log.info("Starting '{}': writer={}, chunkSize={}, workers={}",
-                stepExecution.getStepName(),
-                writingMode,
-                appProperties.getBatch().getChunkSize(),
-                appProperties.getBackgroundTask().getCorePoolSize());
+        // Writer config is logged by the job listener; here we open the live progress block.
+        System.out.println();    // blank line between the job header and the file lines
+        progressReporter.start();
     }
 
     @Override
     public ExitStatus afterStep(StepExecution stepExecution) {
-        log.info("Finished '{}': rows read={}, written={}, status={}",
+        progressReporter.stop();  // commits the last file's line
+        System.out.println();     // blank line before the job summary
+        log.debug("Step '{}' read={}, written={} ({})",
                 stepExecution.getStepName(),
                 stepExecution.getReadCount(),
                 stepExecution.getWriteCount(),
@@ -74,6 +68,8 @@ public class CustomStepExecutionListener implements StepExecutionListener, Chunk
 
     @Override
     public void afterChunk(ChunkContext context) {
+        DocumentService documentService = jobExecutionListener.getDocumentService();
+
         while (!disposableDocuments.isEmpty()) {
             DocumentSession session = disposableDocuments.poll();
             String documentId = session.getDocumentId();
@@ -113,7 +109,8 @@ public class CustomStepExecutionListener implements StepExecutionListener, Chunk
 
             // Move the file
             Files.move(sourcePath, targetPath, StandardCopyOption.REPLACE_EXISTING);
-            log.info("Processed file '{}' ({}/{}) — archived to {}",
+            // Per-file detail kept at debug so it doesn't interrupt the in-place progress line.
+            log.debug("Archived '{}' ({}/{}) -> {}",
                     session.getSheetId(), session.getCurrentCount(), session.getTotalFileCount(), targetPath);
 
             // Auto resize grid

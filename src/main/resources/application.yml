@@ -1,6 +1,24 @@
+spring:
+  batch:
+    jdbc:
+      # Let Spring create the BATCH_* metadata tables in the embedded (H2) datasource each run.
+      initialize-schema: always
+
+logging:
+  pattern:
+    # Clean, message-only console so the narrative reads like the progress block.
+    # %highlight leaves INFO uncoloured and makes WARN/ERROR stand out (red) on a terminal.
+    console: "%highlight(%msg%n)"
+  level:
+    # Quiet framework chatter so the custom job -> step -> file narrative reads cleanly.
+    org.springframework.batch: WARN
+    org.springframework.jdbc: WARN
+    org.springframework.integration: WARN
+    com.zaxxer.hikari: WARN
+
 application:
   batch:
-    chunk-size: 100
+    chunk-size: 1
   background-task:
     core-pool-size: 4
     queue-capacity: 15
@@ -19,12 +37,12 @@ application:
   table:
     row:
       header-present: true
-#      select: 1-3,7,1000
-      select: NONE
+      select: 1-3,7,1000
+#      select: NONE
       max-count: 1000
     col:
-#      select: 9-11,16
-      select: NONE
+      select: 9-11,16
+#      select: NONE
 
 tess4j:
 #  conf:
