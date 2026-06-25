@@ -32,12 +32,34 @@ public class GoogleSheetAPI {
     private Sheets sheets;
     private Drive drive;
 
-    public GoogleSheetAPI(GoogleApiProperties googleApiProperties) throws IOException, GeneralSecurityException {
+    public GoogleSheetAPI(GoogleApiProperties googleApiProperties) {
         this.APPLICATION_NAME = googleApiProperties.getApplicationName();
         this.SPREADSHEET_ID = googleApiProperties.getSpreadsheetId();
+    }
 
-        this.sheets = getService();
-//        this.drive = getDriveService();
+    // Lazily build and cache the clients on first use. The service-account JSON is only required
+    // when an operation actually talks to Google, so the Spring context can boot without it
+    // (e.g. in CI, where the secret is not on the classpath).
+    private Sheets sheets() throws IOException {
+        if (sheets == null) {
+            try {
+                sheets = getService();
+            } catch (GeneralSecurityException e) {
+                throw new IOException("Failed to initialize Google Sheets client", e);
+            }
+        }
+        return sheets;
+    }
+
+    private Drive drive() throws IOException {
+        if (drive == null) {
+            try {
+                drive = getDriveService();
+            } catch (GeneralSecurityException e) {
+                throw new IOException("Failed to initialize Google Drive client", e);
+            }
+        }
+        return drive;
     }
 
     public Spreadsheet newSpreadsheet(String title) throws IOException {
@@ -47,7 +69,7 @@ public class GoogleSheetAPI {
         fileMetadata.setMimeType("application/vnd.google-apps.spreadsheet");
         fileMetadata.setParents(Collections.singletonList("1Yfu7ZEkJz0N_WbLHxwbGMVDbamr9dPB_")); // folder id
 
-        com.google.api.services.drive.model.File createdFile = drive.files()
+        com.google.api.services.drive.model.File createdFile = drive().files()
                 .create(fileMetadata)
                 .setFields("id")
                 .execute();
@@ -60,12 +82,12 @@ public class GoogleSheetAPI {
                 .setRole("writer")
                 .setEmailAddress("r.mahefa.stephan@gmail.com");
 
-        drive.permissions().create(spreadsheetId, userPermission)
+        drive().permissions().create(spreadsheetId, userPermission)
                 .setSendNotificationEmail(false)
                 .execute();
 
         // Step 3: Fetch spreadsheet metadata
-        Spreadsheet spreadsheet = sheets.spreadsheets()
+        Spreadsheet spreadsheet = sheets().spreadsheets()
                 .get(spreadsheetId)
                 .execute();
 
@@ -74,14 +96,14 @@ public class GoogleSheetAPI {
 
     public Spreadsheet getDefaultSpreadsheet() {
         try {
-            return sheets.spreadsheets().get(SPREADSHEET_ID).execute();
+            return sheets().spreadsheets().get(SPREADSHEET_ID).execute();
         } catch (Exception e) {
             return null;
         }
     }
 
     public Spreadsheet getSpreadsheet(String spreadSheetId) throws IOException {
-        return sheets.spreadsheets().get(spreadSheetId).execute();
+        return sheets().spreadsheets().get(spreadSheetId).execute();
     }
 
     public Sheet getSheet(Spreadsheet spreadsheet, String title) throws IOException {
@@ -114,7 +136,7 @@ public class GoogleSheetAPI {
                 .setRequests(requests);
 
         // Execute the batch update request to add the new sheet
-        BatchUpdateSpreadsheetResponse response = sheets.spreadsheets()
+        BatchUpdateSpreadsheetResponse response = sheets().spreadsheets()
                 .batchUpdate(spreadsheet.getSpreadsheetId(), batchUpdateRequest)
                 .execute();
 
@@ -129,7 +151,7 @@ public class GoogleSheetAPI {
         ValueRange valueRange = new ValueRange()
                 .setValues(data);
 
-        sheets.spreadsheets().values()
+        sheets().spreadsheets().values()
                 .append(spreadsheet.getSpreadsheetId(), "'" + title + "'!A1", valueRange)
                 .setValueInputOption("USER_ENTERED")
                 .setInsertDataOption("INSERT_ROWS")
@@ -175,7 +197,7 @@ public class GoogleSheetAPI {
 
         // Execute the batch update
         BatchUpdateSpreadsheetRequest batchUpdateRequest = new BatchUpdateSpreadsheetRequest().setRequests(requests);
-        sheets.spreadsheets().batchUpdate(spreadsheet.getSpreadsheetId(), batchUpdateRequest).execute();
+        sheets().spreadsheets().batchUpdate(spreadsheet.getSpreadsheetId(), batchUpdateRequest).execute();
     }
 
     public void autoResizeGrid(Spreadsheet spreadsheet, Sheet sheet, int lastIndex) throws IOException {
@@ -192,7 +214,7 @@ public class GoogleSheetAPI {
                 .setRequests(Collections.singletonList(new Request().setAutoResizeDimensions(autoResizeDimensionsRequest)));
 
         // Call the batchUpdate method on the Sheets service
-        Sheets.Spreadsheets.BatchUpdate batchUpdate = sheets.spreadsheets().batchUpdate(spreadsheet.getSpreadsheetId(), batchUpdateRequest);
+        Sheets.Spreadsheets.BatchUpdate batchUpdate = sheets().spreadsheets().batchUpdate(spreadsheet.getSpreadsheetId(), batchUpdateRequest);
         batchUpdate.execute();
     }
 
