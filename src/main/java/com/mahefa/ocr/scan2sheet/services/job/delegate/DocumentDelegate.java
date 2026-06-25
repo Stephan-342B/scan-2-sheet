@@ -6,7 +6,6 @@ import org.apache.commons.io.FilenameUtils;
 import com.mahefa.ocr.scan2sheet.common.tools.ImageConverter;
 import com.mahefa.ocr.scan2sheet.data.TableStructure;
 import com.mahefa.ocr.scan2sheet.data.property.AxisProperty;
-import com.mahefa.ocr.scan2sheet.services.job.ProgressReporter;
 import com.mahefa.ocr.scan2sheet.services.job.extractor.RowExtractor;
 import org.opencv.core.Mat;
 import org.opencv.imgcodecs.Imgcodecs;
@@ -43,17 +42,14 @@ public class DocumentDelegate implements ResourceAwareItemReaderItemStream<RowCo
     private AxisProperty columnProperty;
     private int maxRowCount;
 
-    private final ProgressReporter progressReporter;
     private Consumer<DocumentSession> onFileChangedListener;
 
     public DocumentDelegate(TableStructure tableStructure, Path sourceRoot,
-                            ProgressReporter progressReporter,
                             Consumer<DocumentSession> onFileChangedListener) {
         this.rowProperty = tableStructure.getRowProperty();
         this.columnProperty = tableStructure.getColumnProperty();
         this.maxRowCount = tableStructure.getMaxRowCount();
         this.sourceRoot = sourceRoot;
-        this.progressReporter = progressReporter;
 
         // Listeners
         this.onFileChangedListener = onFileChangedListener;
@@ -96,9 +92,6 @@ public class DocumentDelegate implements ResourceAwareItemReaderItemStream<RowCo
             currentRowExtractor = new RowExtractor(mat, rowProperty, columnProperty, maxRowCount);
             currentRowExtractor.setDocumentId(currentDocumentId);
             currentRowExtractor.setSheetId(currentSheetId);
-
-            // Hand the current file to the live progress line (rendered by ProgressReporter).
-            progressReporter.setFile(currentDocumentId, currentSheetId, currentCount, totalFileCount);
         } catch (IOException e) {
             throw new UncheckedIOException("Failed to convert Resource to File: " + resource.getFilename(), e);
         }

@@ -5,6 +5,7 @@ import com.mahefa.ocr.scan2sheet.common.enumerator.WriterMode;
 import com.mahefa.ocr.scan2sheet.common.properties.AppProperties;
 import com.mahefa.ocr.scan2sheet.data.ColumnContext;
 import com.mahefa.ocr.scan2sheet.services.DocumentService;
+import com.mahefa.ocr.scan2sheet.services.job.ProgressReporter;
 import org.springframework.batch.core.configuration.annotation.StepScope;
 import org.springframework.batch.item.Chunk;
 import org.springframework.batch.item.ItemWriter;
@@ -22,10 +23,13 @@ public class RowWriter implements ItemWriter<ColumnContext> {
 
     private final WriterServiceBuilder writerServiceBuilder;
     private final AppProperties appProperties;
+    private final ProgressReporter progressReporter;
 
-    public RowWriter(WriterServiceBuilder writerServiceBuilder, AppProperties appProperties) {
+    public RowWriter(WriterServiceBuilder writerServiceBuilder, AppProperties appProperties,
+                     ProgressReporter progressReporter) {
         this.writerServiceBuilder = writerServiceBuilder;
         this.appProperties = appProperties;
+        this.progressReporter = progressReporter;
     }
 
     @Override
@@ -76,6 +80,9 @@ public class RowWriter implements ItemWriter<ColumnContext> {
                 // Export data
                 documentService = documentService.onSheet(currentDocumentId, currentSheetId, colLength);
                 documentService.writeAll(currentDocumentId, currentSheetId, rows.stream().map(ColumnContext::getData).toList());
+
+                // Drive the live progress from the persisted rows, attributed to their own file.
+                progressReporter.recordRows(currentDocumentId, currentSheetId, rows.size());
             }
         }
     }
