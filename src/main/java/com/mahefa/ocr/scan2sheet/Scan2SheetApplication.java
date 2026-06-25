@@ -5,7 +5,6 @@ import com.mahefa.ocr.scan2sheet.common.properties.GoogleApiProperties;
 import com.mahefa.ocr.scan2sheet.common.properties.Tess4jProperties;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
-import org.springframework.boot.autoconfigure.jdbc.DataSourceAutoConfiguration;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 
 @EnableConfigurationProperties({
@@ -13,7 +12,7 @@ import org.springframework.boot.context.properties.EnableConfigurationProperties
 		Tess4jProperties.class,
 		GoogleApiProperties.class
 })
-@SpringBootApplication(exclude = { DataSourceAutoConfiguration.class })
+@SpringBootApplication
 public class Scan2SheetApplication {
 
 	public static void main(String[] args) {

@@ -7,6 +7,11 @@ import org.springframework.batch.core.launch.JobLauncher;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Component;
 
+/**
+ * Helper to launch the job programmatically. On a normal startup Spring Boot's
+ * JobLauncherApplicationRunner runs the job automatically; this remains available for manual
+ * or alternative triggering.
+ */
 @Component
 public class JobRunner {
 
